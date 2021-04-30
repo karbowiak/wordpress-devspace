@@ -1,0 +1,262 @@
+# Generate Wordpress SALTs with https://roots.io/salts.html
+---
+version: v1beta10
+vars:
+  - name: PHP_NGINX_IMAGE
+    question: What should the image name be ? (Example, github.com/youruser/repo/wordpressphpfpm)
+    default: 10.0.0.188:32000/wordpress-php-fpm
+    source: none
+  - name: NAMESPACE
+    question: What namespace is the project in? This lets MySQL, Redis, Elasticsearch etc. communicate correctly
+    default: wordpress
+  - name: INGRESS_URL
+    question: What is the URL this should listen on? generally you want ${NAMESPACE}.microk8s.local (If local, remember to add to /etc/hosts)
+    default: ${NAMESPACE}.microk8s.local
+  - name: ROOT_PW
+    default: rootpw
+    source: none
+  - name: DB_USER
+    default: wordpress
+    source: none
+  - name: DB_PASS
+    default: wordpress
+    source: none
+  - name: DB_NAME
+    default: wordpress
+    source: none
+  - name: MAILHOG_HOST
+    default: mailhog.${NAMESPACE}.svc.cluster.local
+    source: none
+  - name: REDIS_HOST
+    default: redis-master.${NAMESPACE}.svc.cluster.local
+    source: none
+  - name: MYSQL_HOST
+    default: mariadb-mariadb-galera.${NAMESPACE}.svc.cluster.local
+    source: none
+  - name: WP_ENV
+    default: development
+    options:
+      - development
+      - staging
+      - production
+  - name: WP_HOME
+    default: http://${INGRESS_URL}
+    question: What is the url that wordpress will answer on ?
+  - name: WP_SITEURL
+    default: ${WP_HOME}/
+    question: What is the full url that Wordpress answers on? usually the same as WP_HOME (${WP_HOME}/wp)
+  - name: AUTH_KEY
+    default:
+    question: Please get AUTH_KEY from https://roots.io/salts.html (or generate them yourself)
+  - name: SECURE_AUTH_KEY
+    default:
+    question: Please get SECURE_AUTH_KEY from https://roots.io/salts.html (or generate them yourself)
+  - name: LOGGED_IN_KEY
+    default:
+    question: Please get LOGGED_IN_KEY from https://roots.io/salts.html (or generate them yourself)
+  - name: NONCE_KEY
+    default:
+    question: Please get NONCE_KEY from https://roots.io/salts.html (or generate them yourself)
+  - name: AUTH_SALT
+    default:
+    question: Please get AUTH_SALT from https://roots.io/salts.html (or generate them yourself)
+  - name: SECURE_AUTH_SALT
+    default:
+    question: Please get SECURE_AUTH_SALT from https://roots.io/salts.html (or generate them yourself)
+  - name: LOGGED_IN_SALT
+    default:
+    question: Please get LOGGED_IN_SALT from https://roots.io/salts.html (or generate them yourself)
+  - name: NONCE_SALT
+    default:
+    question: Please get NONCE_SALT from https://roots.io/salts.html (or generate them yourself)
+  - name: REDIS_SALT
+    default: wordpress
+    question: Please define a salt to use for Redis caching (Can be anything)
+  - name: WP_DEBUG_LOG
+    default: /dev/stdout
+    source: none
+
+images:
+  php:
+    image: ${PHP_NGINX_IMAGE}
+    dockerfile: ./.container/Dockerfile.prod
+    context: ./
+    injectRestartHelper: true
+    appendDockerfileInstructions:
+      - USER root
+    rebuildStrategy: ignoreContextChanges
+
+deployments:
+  - name: web
+    helm:
+      componentChart: true
+      values:
+        replicas: 1
+        service:
+          ports:
+            - port: 8080
+        containers:
+          - image: ${PHP_NGINX_IMAGE}
+            env:
+              - name: REDIS_HOST
+                value: ${REDIS_HOST}
+              - name: DB_NAME
+                value: ${DB_NAME}
+              - name: DB_HOST
+                value: ${MYSQL_HOST}
+              - name: DB_USER
+                value: ${DB_USER}
+              - name: DB_PASSWORD
+                value: ${DB_PASS}
+              - name: MAIL_HOST
+                value: ${MAILHOG_HOST}
+              - name: WP_ENV
+                value: ${WP_ENV}
+              - name: WP_HOME
+                value: ${WP_HOME}
+              - name: WP_SITEURL
+                value: ${WP_SITEURL}
+              - name: AUTH_KEY
+                value: ${AUTH_KEY}
+              - name: SECURE_AUTH_KEY
+                value: ${SECURE_AUTH_KEY}
+              - name: LOGGED_IN_KEY
+                value: ${LOGGED_IN_KEY}
+              - name: NONCE_KEY
+                value: ${NONCE_KEY}
+              - name: AUTH_SALT
+                value: ${AUTH_SALT}
+              - name: SECURE_AUTH_SALT
+                value: ${SECURE_AUTH_SALT}
+              - name: LOGGED_IN_SALT
+                value: ${LOGGED_IN_SALT}
+              - name: NONCE_SALT
+                value: ${NONCE_SALT}
+              - name: WP_DEBUG_LOG
+                value: ${WP_DEBUG_LOG}
+        ingress:
+          tls: false
+          rules:
+            - host: ${INGRESS_URL}
+
+  - name: redis
+    helm:
+      chart:
+        repo: https://charts.bitnami.com/bitnami
+        name: redis
+      values:
+        replica:
+          replicaCount: 1
+        auth:
+          enabled: false
+        service:
+          ports:
+            - port: 6379
+        persistence:
+          size: 5Gi
+        master:
+          disableCommands: []
+      wait: true
+
+  - name: mariadb
+    helm:
+      chart:
+        repo: https://charts.bitnami.com/bitnami
+        name: mariadb-galera
+      values:
+        replicaCount: 1
+        rootUser:
+          user: root
+          password: ${ROOT_PW}
+        db:
+          user: ${DB_USER}
+          password: ${DB_PASS}
+          name: ${DB_NAME}
+        persistence:
+          size: 50Gi
+
+  - name: phpmyadmin
+    helm:
+      chart:
+        repo: https://charts.bitnami.com/bitnami
+        name: phpmyadmin
+      values:
+        db:
+          host: ${MYSQL_HOST}
+          allowArbitraryServer: false
+
+  - name: mailhog
+    helm:
+      componentChart: true
+      values:
+        replicas: 1
+        containers:
+          - image: mailhog/mailhog
+
+dev:
+  ports:
+    - labelSelector:
+        app.kubernetes.io/component: web
+      forward:
+        - port: 8080
+          remotePort: 8080
+      reverseForward:
+        - port: 9000
+          remotePort: 9000
+        - port: 9003
+          remotePort: 9003
+    - labelSelector:
+        statefulset.kubernetes.io/pod-name: redis-master-0
+      forward:
+        - port: 6379
+          remotePort: 6379
+    - labelSelector:
+        statefulset.kubernetes.io/pod-name: mariadb-mariadb-galera-0
+      forward:
+        - port: 3306
+          remotePort: 3306
+    - labelSelector:
+        app.kubernetes.io/component: mailhog
+      forward:
+        - port: 1025
+          remotePort: 1025
+        - port: 8025
+          remotePort: 8025
+    - labelSelector:
+        app.kubernetes.io/name: phpmyadmin
+        app.kubernetes.io/instance: phpmyadmin
+      forward:
+        - port: 8070
+          remotePort: 8080
+  open:
+    - url: ${INGRESS_URL}
+  sync:
+    - labelSelector:
+        app.kubernetes.io/component: web
+      excludePaths:
+        - .git/
+        - .devspace/
+        - .idea/
+        - .vscode/
+      uploadExcludePaths:
+        - devspace.yaml
+      onUpload:
+        restartContainer: false
+
+commands:
+  - name: cli
+    command: "devspace -n ${NAMESPACE} enter --label-selector app.kubernetes.io/component=web zsh"
+
+hooks:
+  - command: "/usr/local/bin/composer"
+    args:
+      - "install"
+      - "-o"
+    where:
+      container:
+        wait: true
+        labelSelector:
+          app.kubernetes.io/component: web
+    when:
+      after:
+        deployments: all
