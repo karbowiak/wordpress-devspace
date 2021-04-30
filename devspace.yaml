@@ -5,7 +5,6 @@ vars:
   - name: PHP_NGINX_IMAGE
     question: What should the image name be ? (Example, github.com/youruser/repo/wordpressphpfpm)
     default: 10.0.0.188:32000/wordpress-php-fpm
-    source: none
   - name: NAMESPACE
     question: What namespace is the project in? This lets MySQL, Redis, Elasticsearch etc. communicate correctly
     default: wordpress
@@ -43,7 +42,7 @@ vars:
     default: http://${INGRESS_URL}
     question: What is the url that wordpress will answer on ?
   - name: WP_SITEURL
-    default: ${WP_HOME}/
+    default: ${WP_HOME}/wp
     question: What is the full url that Wordpress answers on? usually the same as WP_HOME (${WP_HOME}/wp)
   - name: AUTH_KEY
     default:
