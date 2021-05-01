@@ -315,19 +315,6 @@ hooks:
     when:
       after:
         deployments: all
-  - command: "/usr/local/bin/wp"
-    args:
-      - "--allow-root"
-      - "redis"
-      - "enable"
-    where:
-      container:
-        wait: true
-        labelSelector:
-          app.kubernetes.io/component: web
-    when:
-      after:
-        deployments: all
 
 profiles:
   - name: production
