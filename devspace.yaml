@@ -29,6 +29,15 @@ vars:
   - name: REDIS_HOST
     default: redis-master.${NAMESPACE}.svc.cluster.local
     source: none
+  - name: REDIS_PORT
+    default: '6379'
+    source: none
+  - name: REDIS_DB
+    default: '0'
+    source: none
+  - name: REDIS_PASSWORD
+    default: 'redis'
+    question: What should the password be for redis?
   - name: MYSQL_HOST
     default: mariadb-mariadb-galera.${NAMESPACE}.svc.cluster.local
     source: none
@@ -72,13 +81,13 @@ vars:
     default: wordpress
     question: Please define a salt to use for Redis caching (Can be anything)
   - name: WP_DEBUG_LOG
-    default: /dev/stdout
+    default: /var/www/logs/debug.log
     source: none
 
 images:
   php:
     image: ${PHP_NGINX_IMAGE}
-    dockerfile: ./.container/Dockerfile.prod
+    dockerfile: ./.container/Dockerfile.dev
     context: ./
     injectRestartHelper: true
     appendDockerfileInstructions:
@@ -101,10 +110,14 @@ deployments:
         containers:
           - image: ${PHP_NGINX_IMAGE}
             env:
-              - name: REDIS_HOST
+              - name: CACHE_HOST
                 value: ${REDIS_HOST}
-              - name: DATABASE_URL
-                value: 'mysql://${DB_USER}:${DB_PASS}@${MYSQL_HOST}:3306/${DB_NAME}'
+              - name: CACHE_PASSWORD
+                value: ${REDIS_PASSWORD}
+              - name: CACHE_PORT
+                value: ${REDIS_PORT}
+              - name: CACHE_DB
+                value: ${REDIS_DB}
               - name: DB_USER
                 value: ${DB_USER}
               - name: DB_PASSWORD
@@ -153,7 +166,8 @@ deployments:
         replica:
           replicaCount: 1
         auth:
-          enabled: false
+          enabled: true
+          password: ${REDIS_PASSWORD}
         service:
           ports:
             - port: 6379
@@ -192,6 +206,24 @@ deployments:
         db:
           host: ${MYSQL_HOST}
           allowArbitraryServer: false
+
+  - name: redisadmin
+    helm:
+      componentChart: true
+      values:
+        replicas: 1
+        containers:
+          - image: erikdubbelboer/phpredisadmin
+            env:
+              - name: REDIS_1_HOST
+                value: ${REDIS_HOST}
+              - name: REDIS_1_NAME
+                value: cluster
+              - name: REDIS_1_AUTH
+                value: ${REDIS_PASSWORD}
+        service:
+          ports:
+            - port: 80
 
   - name: mailhog
     helm:
@@ -234,6 +266,11 @@ dev:
         - port: 8025
           remotePort: 8025
     - labelSelector:
+        app.kubernetes.io/component: redisadmin
+      forward:
+        - port: 8060
+          remotePort: 80
+    - labelSelector:
         app.kubernetes.io/name: phpmyadmin
         app.kubernetes.io/instance: phpmyadmin
       forward:
@@ -251,8 +288,19 @@ dev:
         - .vscode/
       uploadExcludePaths:
         - devspace.yaml
+        - web/app/debug.log
+        - logs/
+      downloadExcludePaths:
+        - web/app/debug.log
+        - logs/
       onUpload:
         restartContainer: false
+        execRemote:
+          onBatch:
+            command: 'composer'
+            args:
+              - 'update'
+              - '-o'
 
 commands:
   - name: cli
@@ -271,3 +319,31 @@ hooks:
     when:
       after:
         deployments: all
+
+profiles:
+  - name: production
+    patches:
+      - op: replace
+        path: images.app.dockerfile
+        value: Dockerfile.prod
+      - op: replace
+        path: deployments.name=web.namespace
+        value: ${NAMESPACE}-production
+      - op: replace
+        path: deployments.name=cron.namespace
+        value: ${NAMESPACE}-production
+      - op: replace
+        path: deployments.name=queue.namespace
+        value: ${NAMESPACE}-production
+      - op: replace
+        path: deployments.name=redis.namespace
+        value: ${NAMESPACE}-production
+      - op: replace
+        path: deployments.name=mongodb.namespace
+        value: ${NAMESPACE}-production
+      - op: replace
+        path: deployments.name=mongodb.helm.values.replicaCount
+        value: 2
+      - op: replace
+        path: deployments.name=redis.helm.values.replica.replicaCount
+        value: 2
