@@ -290,17 +290,13 @@ dev:
         - devspace.yaml
         - web/app/debug.log
         - logs/
+        - object-cache.php
       downloadExcludePaths:
         - web/app/debug.log
         - logs/
+        - object-cache.php
       onUpload:
         restartContainer: false
-        execRemote:
-          onBatch:
-            command: 'composer'
-            args:
-              - 'update'
-              - '-o'
 
 commands:
   - name: cli
@@ -311,6 +307,19 @@ hooks:
     args:
       - "install"
       - "-o"
+    where:
+      container:
+        wait: true
+        labelSelector:
+          app.kubernetes.io/component: web
+    when:
+      after:
+        deployments: all
+  - command: "/usr/local/bin/wp"
+    args:
+      - "--allow-root"
+      - "redis"
+      - "enable"
     where:
       container:
         wait: true
