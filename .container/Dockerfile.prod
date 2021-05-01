@@ -43,6 +43,7 @@ RUN apt install -y php8.0 php8.0-readline php8.0-cli php8.0-common \
   php8.0-inotify \
   php8.0-mysql \
   php8.0-mysqlnd \
+  php8.0-mysqli \
   php8.0-psr \
   php8.0-zip \
   php8.0-bz2 \

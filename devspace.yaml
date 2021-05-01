@@ -84,6 +84,10 @@ images:
     appendDockerfileInstructions:
       - USER root
     rebuildStrategy: ignoreContextChanges
+    build:
+      kaniko:
+        insecure: false
+        cache: true
 
 deployments:
   - name: web
@@ -101,6 +105,14 @@ deployments:
                 value: ${REDIS_HOST}
               - name: DATABASE_URL
                 value: 'mysql://${DB_USER}:${DB_PASS}@${MYSQL_HOST}:3306/${DB_NAME}'
+              - name: DB_USER
+                value: ${DB_USER}
+              - name: DB_PASSWORD
+                value: ${DB_PASS}
+              - name: DB_HOST
+                value: ${MYSQL_HOST}
+              - name: DB_NAME
+                value: ${DB_NAME}
               - name: MAIL_HOST
                 value: ${MAILHOG_HOST}
               - name: WP_ENV
@@ -167,6 +179,9 @@ deployments:
           name: ${DB_NAME}
         persistence:
           size: 50Gi
+        service:
+          ports:
+            - port: 3306
 
   - name: phpmyadmin
     helm:
@@ -185,6 +200,9 @@ deployments:
         replicas: 1
         containers:
           - image: mailhog/mailhog
+        service:
+          ports:
+            - port: 1025
 
 dev:
   ports:
