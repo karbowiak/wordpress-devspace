@@ -85,8 +85,9 @@ images:
       - USER root
     rebuildStrategy: ignoreContextChanges
     build:
-      buildKit:
-        skipPush: true
+      kaniko:
+        insecure: true
+        cache: true
 
 deployments:
   - name: web
