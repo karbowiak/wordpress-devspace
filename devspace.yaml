@@ -84,10 +84,6 @@ images:
     appendDockerfileInstructions:
       - USER root
     rebuildStrategy: ignoreContextChanges
-    build:
-      kaniko:
-        insecure: true
-        cache: true
 
 deployments:
   - name: web
